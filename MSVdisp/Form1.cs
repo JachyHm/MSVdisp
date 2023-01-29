@@ -14,6 +14,8 @@ namespace MSVdisp
         private const string PRODUCT_PATH = @"g:\RailworksData\Source\JachyHm\CD460pack01\";
         private static readonly Rectangle DEST_RECT = new Rectangle(0, 0, WIDTH, HEIGHT);
 
+        private bool codeDraw = false;
+
         struct FontArray
         {
             public uint[] Data;
@@ -35,7 +37,7 @@ namespace MSVdisp
         private static FontArray font;
         private static Bitmap destImage = new Bitmap(WIDTH, HEIGHT);
         //private static Graphics destG = Graphics.FromImage(destImage);
-        private static byte[,] leds = new byte[0,0];
+        private static byte[,] leds = new byte[0, 0];
         private static Color TRANSPARENT_ORANGE = Color.FromArgb(0, 255, 102, 1);
 
         public Form1()
@@ -61,7 +63,7 @@ namespace MSVdisp
                 return;
             }
 
-            byte c = (byte)(textBox1.Text.Length > 0 ? CodePagesEncodingProvider.Instance.GetEncoding("windows-1250").GetBytes(textBox1.Text)[0] : 0x20);
+            byte c = (byte)(textBox1.Text.Length > 0 ? CodePagesEncodingProvider.Instance.GetEncoding("windows-1250")!.GetBytes(textBox1.Text)[0] : 0x20);
             if (c is < 0x20 or > 0xFF)
             {
                 textBox1.Text = "";
@@ -83,7 +85,7 @@ namespace MSVdisp
             }
 
             codeIsWriting = true;
-            textBox1.Text = CodePagesEncodingProvider.Instance.GetEncoding("windows-1250").GetString(new byte[] {(byte)numericUpDown1.Value});
+            textBox1.Text = CodePagesEncodingProvider.Instance.GetEncoding("windows-1250")!.GetString(new byte[] { (byte)numericUpDown1.Value });
             codeIsWriting = false;
 
             DrawChar();
@@ -94,7 +96,7 @@ namespace MSVdisp
             string fontId = (string)fontComboBox.SelectedItem;
             font = new FontArray(Fonts.fonts[fontId]);
 
-            DrawChar();
+            DrawChar(false, true);
         }
 
         private byte ExtractBit(uint colData, int row)
@@ -111,7 +113,7 @@ namespace MSVdisp
                 uint column = font.Data[offset + x];
                 for (byte y = 0; y < font.Height; y++)
                 {
-                    byte value = (byte)(ExtractBit(column, y)*byte.MaxValue);
+                    byte value = (byte)(ExtractBit(column, y) * byte.MaxValue);
                     leds[x, y] = value;
 
                     /*if (value == byte.MaxValue)
@@ -138,21 +140,22 @@ namespace MSVdisp
             return leds;
         }
 
-        private void DrawChar(bool fullChar = false)
+        private void DrawChar(bool fullChar = false, bool redraw = false)
         {
-            uint offset = 3 + (((uint)numericUpDown1.Value - 0x20)*(font.Width+1));
+            uint offset = 3 + (((uint)numericUpDown1.Value - 0x20) * (font.Width + 1));
             uint charWidth = fullChar ? font.Width : font.Data[offset++];
             leds = FillArray(offset);
 
-            int rescaleX = (int)(WIDTH/font.Width);
-            int rescaleY = (int)(HEIGHT/font.Height);
+            int rescaleX = (int)(WIDTH / font.Width);
+            int rescaleY = (int)(HEIGHT / font.Height);
             int rescale = Math.Min(rescaleX, rescaleY);
 
             int drawWidth = (int)font.Width * rescale;
             int drawHeight = (int)font.Height * rescale;
-            destImage = new(drawWidth, drawHeight);
+            if (redraw)
+                destImage = new(drawWidth, drawHeight);
 
-            float ledSz = drawWidth/(font.Width);
+            float ledSz = drawWidth / (font.Width);
             //var destImage = new Bitmap(WIDTH, HEIGHT);
 
             //destImage.SetResolution(tempBitmap.HorizontalResolution, tempBitmap.VerticalResolution);
@@ -195,11 +198,13 @@ namespace MSVdisp
                 destG.DrawImage(tempBitmap, DEST_RECT, 0, 0, tempBitmap.Width, tempBitmap.Height, GraphicsUnit.Pixel, wrapMode);
             }*/
 
-            pictureBox1.Image = destImage;
+            if (!codeDraw)
+                pictureBox1.Image = destImage;
         }
 
         private void button1_Click(object sender, EventArgs e)
         {
+            codeDraw = true;
             FolderBrowserDialog dialog = new()
             {
                 AutoUpgradeEnabled = true,
@@ -211,21 +216,24 @@ namespace MSVdisp
 
             string folder = dialog.SelectedPath;
             string relativeFolder = Path.GetRelativePath(PRODUCT_PATH, folder);
-            StreamWriter sw = new(Path.Combine(folder, $"{((string)fontComboBox.SelectedItem).Replace(" ", "_")}.xml"), false);
-            sw.Write(Resources.xmlStart);
-            Directory.CreateDirectory(Path.Combine(folder, "source"));
-            for (int j = 0x20; j <= 0xFF; j++)
+            using (StreamWriter sw = new(Path.Combine(folder, $"{((string)fontComboBox.SelectedItem).Replace(" ", "_")}.xml"), false))
             {
-                numericUpDown1.Value = j;
-                string filename = $"decal_primarynumber_{j-0x20}";
-                destImage.Save(Path.Combine(folder, "source", $"{filename}.png"), ImageFormat.Png);
-                sw.Write(string.Format(Resources.xmlData, SecurityElement.Escape(((char)j).ToString()), Path.Combine(relativeFolder, $"{filename}.dds")));
+                sw.Write(Resources.xmlStart);
+                Directory.CreateDirectory(Path.Combine(folder, "source"));
+                for (int j = 0x20; j <= 0xFF; j++)
+                {
+                    numericUpDown1.Value = j;
+                    string filename = $"decal_primarynumber_{j - 0x20}";
+                    destImage.Save(Path.Combine(folder, "source", $"{filename}.png"), ImageFormat.Png);
+                    sw.Write(string.Format(Resources.xmlData, SecurityElement.Escape(((char)j).ToString()), Path.Combine(relativeFolder, $"{filename}.dds")));
+                }
+                DrawChar(true);
+                destImage.Save(Path.Combine(folder, "source", "fc.png"), ImageFormat.Png);
+                sw.Write(Resources.xmlEnd);
+                sw.Close();
             }
-            DrawChar(true);
-            destImage.Save(Path.Combine(folder, "source", "fc.png"), ImageFormat.Png);
-            sw.Write(Resources.xmlEnd);
-            sw.Close();
             MessageBox.Show("Generování OK!");
+            codeDraw = false;
         }
     }
 }
