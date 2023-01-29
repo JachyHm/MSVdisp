@@ -13,8 +13,8 @@ namespace MSVdisp
         private const int WIDTH = 512;
         private const string PRODUCT_PATH = @"g:\RailworksData\Source\JachyHm\CD460pack01\";
         private static readonly Rectangle DEST_RECT = new Rectangle(0, 0, WIDTH, HEIGHT);
-
-        private bool codeDraw = false;
+        private static readonly Bitmap ledOn = Resources.LED;
+        private static Color TRANSPARENT_ORANGE = Color.FromArgb(0, 255, 102, 1);
 
         struct FontArray
         {
@@ -36,9 +36,8 @@ namespace MSVdisp
 
         private static FontArray font;
         private static Bitmap destImage = new Bitmap(WIDTH, HEIGHT);
-        //private static Graphics destG = Graphics.FromImage(destImage);
+        private static Graphics destG = Graphics.FromImage(destImage);
         private static byte[,] leds = new byte[0, 0];
-        private static Color TRANSPARENT_ORANGE = Color.FromArgb(0, 255, 102, 1);
 
         public Form1()
         {
@@ -46,11 +45,11 @@ namespace MSVdisp
             fontComboBox.Items.AddRange(Fonts.fonts.Keys.ToArray());
             fontComboBox.SelectedIndex = 0;
 
-            /*destG.CompositingMode = CompositingMode.SourceCopy;
+            destG.CompositingMode = CompositingMode.SourceCopy;
             destG.CompositingQuality = CompositingQuality.HighQuality;
             destG.InterpolationMode = InterpolationMode.HighQualityBicubic;
             destG.SmoothingMode = SmoothingMode.HighQuality;
-            destG.PixelOffsetMode = PixelOffsetMode.HighQuality;*/
+            destG.PixelOffsetMode = PixelOffsetMode.HighQuality;
 
             DrawChar();
         }
@@ -115,25 +114,6 @@ namespace MSVdisp
                 {
                     byte value = (byte)(ExtractBit(column, y) * byte.MaxValue);
                     leds[x, y] = value;
-
-                    /*if (value == byte.MaxValue)
-                        continue;
-
-                    byte sum = 128;
-                    for (byte i = (byte)(x == 0 ? 3 : 0); i < (x == font.Height-1 ? 6 : 9); i++)
-                    {
-                        if (i == 4)
-                            i++;
-
-                        sbyte row = (sbyte)(y+(i%3)-1);
-                        if (row < 0)
-                            continue;
-
-                        uint colData = font.Data[offset + (i/3) + x - 1];
-                        if (ExtractBit(colData, row) == 1)
-                            sum = (byte)((sum >> 1)&255);
-                    }
-                    leds[x, y] = (byte)(128 - sum);*/
                 }
             }
 
@@ -153,58 +133,32 @@ namespace MSVdisp
             int drawWidth = (int)font.Width * rescale;
             int drawHeight = (int)font.Height * rescale;
             if (redraw)
+            {
                 destImage = new(drawWidth, drawHeight);
+                destG = Graphics.FromImage(destImage);
+            }
 
             float ledSz = drawWidth / (font.Width);
-            //var destImage = new Bitmap(WIDTH, HEIGHT);
-
-            //destImage.SetResolution(tempBitmap.HorizontalResolution, tempBitmap.VerticalResolution);
-
-            using (var g = Graphics.FromImage(destImage))
+            destG.Clear(TRANSPARENT_ORANGE);
+            for (int x = 0; x < charWidth; x++)
             {
-                g.CompositingMode = CompositingMode.SourceCopy;
-                g.CompositingQuality = CompositingQuality.HighQuality;
-                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                g.SmoothingMode = SmoothingMode.HighQuality;
-                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-                g.Clear(TRANSPARENT_ORANGE);
-
-                for (int x = 0; x < charWidth; x++)
+                for (int y = 0; y < font.Height; y++)
                 {
-                    for (int y = 0; y < font.Height; y++)
+                    byte val = leds[x, y];
+                    if (val == 0 && !fullChar)
+                        continue;
+                    if (val == byte.MaxValue || fullChar)
                     {
-                        byte val = leds[x, y];
-                        if (val == 0 && !fullChar)
-                            continue;
-                        if (val == byte.MaxValue || fullChar)
-                        {
-                            //g.DrawImage(Resources.LED_zhas, x * ledSz, y * ledSz, ledSz, ledSz);
-                            g.DrawImage(Resources.LED, x * ledSz, y * ledSz, ledSz, ledSz);
-                        } /*else
-                    {
-                        ColorMatrix CMFade = new ColorMatrix();
-                        ImageAttributes AFade = new ImageAttributes();
-                        CMFade.Matrix33 = val/255f;
-                        AFade.SetColorMatrix(CMFade, ColorMatrixFlag.Default, ColorAdjustType.Bitmap);
-                        g.DrawImage(Resources.LED_zhas, new PointF[] { new PointF(x * ledSz, y * ledSz), new PointF(x * ledSz + ledSz, y * ledSz), new PointF(x * ledSz, y * ledSz + ledSz) }, new RectangleF(0, 0, 47, 42), GraphicsUnit.Pixel, AFade);
-                    }*/
+                        destG.DrawImage(ledOn, x * ledSz, y * ledSz, ledSz, ledSz);
                     }
                 }
             }
 
-            /*using (var wrapMode = new ImageAttributes())
-            {
-                wrapMode.SetWrapMode(WrapMode.TileFlipXY);
-                destG.DrawImage(tempBitmap, DEST_RECT, 0, 0, tempBitmap.Width, tempBitmap.Height, GraphicsUnit.Pixel, wrapMode);
-            }*/
-
-            if (!codeDraw)
-                pictureBox1.Image = destImage;
+            pictureBox1.Image = destImage;
         }
 
         private void button1_Click(object sender, EventArgs e)
         {
-            codeDraw = true;
             FolderBrowserDialog dialog = new()
             {
                 AutoUpgradeEnabled = true,
@@ -233,7 +187,6 @@ namespace MSVdisp
                 sw.Close();
             }
             MessageBox.Show("Generování OK!");
-            codeDraw = false;
         }
     }
 }
